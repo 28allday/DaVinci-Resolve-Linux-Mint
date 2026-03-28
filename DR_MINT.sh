@@ -22,13 +22,13 @@
 #   ./DR_MINT.sh
 # ==============================================================================
 
-set -e  # Exit immediately if any command fails
+set -eo pipefail  # Exit immediately if any command fails; catch pipe failures too
 
 # Resolve the real user even when running with sudo. logname returns the
 # user who originally logged in, not "root". This ensures we look for the
 # ZIP in the correct home directory and set proper file ownership.
 ACTIVE_USER=$(logname)
-HOME_DIR=$(eval echo "~$ACTIVE_USER")
+HOME_DIR=$(getent passwd "$ACTIVE_USER" | cut -d: -f6)
 DOWNLOADS_DIR="$HOME_DIR/Downloads"
 EXTRACTION_DIR="/opt/resolve"
 ZIP_FILE_PATTERN="DaVinci_Resolve_*.zip"
@@ -46,7 +46,7 @@ ZIP_FILE_PATTERN="DaVinci_Resolve_*.zip"
 # If FUSE still doesn't work after installation (e.g. in a container or
 # restricted environment), the script falls back to --appimage-extract later.
 echo "Checking for FUSE and libfuse.so.2..."
-if ! dpkg -l | grep -q fuse; then
+if ! dpkg -s fuse libfuse2 >/dev/null 2>&1; then
     echo "Installing FUSE..."
     sudo apt update
     sudo apt install -y fuse libfuse2
@@ -100,7 +100,7 @@ fi
 
 unzip -o "$ZIP_FILE" -d DaVinci_Resolve/
 chown -R "$ACTIVE_USER:$ACTIVE_USER" DaVinci_Resolve
-chmod -R 774 DaVinci_Resolve
+chmod -R u+rwX,go+rX DaVinci_Resolve
 
 # ==================== Step 5: Run Installer ====================
 #
@@ -131,15 +131,19 @@ chmod +x "$INSTALLER_FILE"
 export QT_DEBUG_PLUGINS=1
 export QT_QPA_PLATFORM_PLUGIN_PATH=/usr/lib/x86_64-linux-gnu/qt5/plugins/platforms
 export QT_PLUGIN_PATH=/usr/lib/x86_64-linux-gnu/qt5/plugins
-export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 
 # Try FUSE-based install first, fall back to manual extraction
 if ! SKIP_PACKAGE_CHECK=1 ./"$INSTALLER_FILE" -a; then
     echo "FUSE is not functional. Extracting AppImage contents..."
+    ./"$INSTALLER_FILE" --appimage-extract || { echo "Error: AppImage extraction failed"; exit 1; }
+    if [ ! -d "squashfs-root" ] || [ -z "$(ls -A squashfs-root)" ]; then
+        echo "Error: Extraction produced empty directory"; exit 1
+    fi
     sudo mkdir -p "$EXTRACTION_DIR"
-    ./"$INSTALLER_FILE" --appimage-extract
-    sudo mv squashfs-root/* "$EXTRACTION_DIR/"
+    sudo cp -a squashfs-root/. "$EXTRACTION_DIR/"
     sudo chown -R root:root "$EXTRACTION_DIR"
+    rm -rf squashfs-root
 fi
 
 # ==================== Step 6: Library Conflict Resolution ====================
