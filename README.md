@@ -1,5 +1,13 @@
 # DaVinci Resolve - Linux Mint
 
+## Video Guide
+
+<p align="center">
+  <a href="https://youtu.be/l61-RjzW4d4">
+    <img src="https://img.youtube.com/vi/l61-RjzW4d4/0.jpg" width="700">
+  </a>
+</p>
+
 Install [DaVinci Resolve](https://www.blackmagicdesign.com/products/davinciresolve) on Linux Mint 22 with automatic dependency installation and library conflict resolution.
 
 ## Requirements
