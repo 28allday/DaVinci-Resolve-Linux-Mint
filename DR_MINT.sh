@@ -24,10 +24,16 @@
 
 set -eo pipefail  # Exit immediately if any command fails; catch pipe failures too
 
+# Ensure the script is run with root privileges (needed for apt, chown, etc.)
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Error: This script must be run with sudo (e.g., sudo ./DR_MINT.sh)."
+    exit 1
+fi
+
 # Resolve the real user even when running with sudo. logname returns the
 # user who originally logged in, not "root". This ensures we look for the
 # ZIP in the correct home directory and set proper file ownership.
-ACTIVE_USER=$(logname)
+ACTIVE_USER=$(logname 2>/dev/null || echo "${SUDO_USER:-$USER}")
 HOME_DIR=$(getent passwd "$ACTIVE_USER" | cut -d: -f6)
 DOWNLOADS_DIR="$HOME_DIR/Downloads"
 EXTRACTION_DIR="/opt/resolve"
@@ -92,7 +98,7 @@ cd "$DOWNLOADS_DIR"
 # We extract it to a temporary DaVinci_Resolve/ directory, set ownership
 # to the real user (not root), and make files executable.
 echo "Extracting DaVinci Resolve installer..."
-ZIP_FILE=$(find . -maxdepth 1 -type f -name "$ZIP_FILE_PATTERN" | head -n 1)
+ZIP_FILE=$(find . -maxdepth 1 -type f -name "$ZIP_FILE_PATTERN" -print -quit)
 if [ -z "$ZIP_FILE" ]; then
     echo "Error: DaVinci Resolve ZIP file not found in $DOWNLOADS_DIR."
     exit 1
@@ -117,8 +123,8 @@ chmod -R u+rwX,go+rX DaVinci_Resolve
 # Qt environment variables are set so the installer can find the system's
 # Qt5 plugins for rendering its UI.
 echo "Running the DaVinci Resolve installer..."
-cd DaVinci_Resolve
-INSTALLER_FILE=$(find . -type f -name "DaVinci_Resolve_*.run" | head -n 1)
+cd "$DOWNLOADS_DIR/DaVinci_Resolve"
+INSTALLER_FILE=$(find . -type f -name "DaVinci_Resolve_*.run" -print -quit)
 if [ -z "$INSTALLER_FILE" ]; then
     echo "Error: DaVinci Resolve installer (.run) file not found in extracted directory."
     exit 1
@@ -163,8 +169,9 @@ echo "Resolving library conflicts..."
 if [ -d "$EXTRACTION_DIR/libs" ]; then
     cd "$EXTRACTION_DIR/libs"
     sudo mkdir -p not_used
-    sudo mv libgio* not_used || true
-    sudo mv libgmodule* not_used || true
+    for lib in libgio* libgmodule*; do
+        [ -e "$lib" ] && sudo mv "$lib" not_used/
+    done
 
     if [ -f /usr/lib/x86_64-linux-gnu/libglib-2.0.so.0 ]; then
         sudo cp /usr/lib/x86_64-linux-gnu/libglib-2.0.so.0 "$EXTRACTION_DIR/libs/"
