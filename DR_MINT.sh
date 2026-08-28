@@ -45,22 +45,21 @@ ZIP_FILE_PATTERN="DaVinci_Resolve_*.zip"
 # uses FUSE (Filesystem in Userspace) to mount itself and run. Linux Mint
 # doesn't always have FUSE installed by default.
 #
-# We need two things:
-#   - fuse:     The FUSE kernel module and mount tools
-#   - libfuse2: The userspace library (libfuse.so.2) that AppImages link against
+# We need ONLY the userspace library (libfuse.so.2) that the installer
+# links against. Do NOT install the old 'fuse' (v2) package: on current
+# Mint it conflicts with the preinstalled fuse3, and apt resolves that by
+# REMOVING fuse3 — taking Cinnamon desktop components with it (issue #2).
+# fuse3, already on every stock Mint, provides the mount tools; the only
+# missing piece is the v2 library.
 #
 # If FUSE still doesn't work after installation (e.g. in a container or
 # restricted environment), the script falls back to --appimage-extract later.
-echo "Checking for FUSE and libfuse.so.2..."
-if ! dpkg -s fuse libfuse2 >/dev/null 2>&1; then
-    echo "Installing FUSE..."
-    sudo apt update
-    sudo apt install -y fuse libfuse2
-fi
-
+echo "Checking for libfuse.so.2..."
 if [ ! -f /lib/x86_64-linux-gnu/libfuse.so.2 ]; then
-    echo "Error: libfuse.so.2 is not found. Installing libfuse2..."
-    sudo apt install -y libfuse2
+    echo "Installing libfuse2..."
+    sudo apt update
+    # Mint 22 (Ubuntu 24.04 base) renamed the package to libfuse2t64.
+    sudo apt install -y libfuse2t64 2>/dev/null || sudo apt install -y libfuse2
 fi
 
 # ==================== Step 2: Qt5 Libraries ====================
